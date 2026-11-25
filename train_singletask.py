@@ -9,7 +9,7 @@ from argparse import ArgumentParser
 
 from model.model import SingleLiteNetPlus
 from loss import SigleLoss
-from utils import train, val_one, netParams, save_checkpoint, poly_lr_scheduler
+from utils import build_optimizers, load_optimizer_state, train, val_one, netParams, save_checkpoint, poly_lr_scheduler
 import BDD100K
 
 class ModelEMA:
@@ -60,8 +60,7 @@ def train_net(args, hyp):
     
     criteria = SigleLoss(hyp,task=args.task)
     start_epoch = 0
-    lr = hyp['lr']
-    optimizer = torch.optim.AdamW(model.parameters(), lr=lr, betas=(hyp['momentum'], 0.999), eps=hyp['eps'], weight_decay=hyp['weight_decay'])
+    optimizers, conv_weights = build_optimizers(model, hyp)
     
     ema = ModelEMA(model) if use_ema else None
     
@@ -75,7 +74,7 @@ def train_net(args, hyp):
             if use_ema:
                 ema.ema.load_state_dict(checkpoint['ema_state_dict'])
                 ema.updates = checkpoint['updates']
-            optimizer.load_state_dict(checkpoint['optimizer'])
+            load_optimizer_state(optimizers, checkpoint['optimizer'])
             print(f"=> Loaded checkpoint '{args.resume}' (epoch {checkpoint['epoch']})")
         else:
             print(f"=> No valid checkpoint found at '{args.resume}'")
@@ -84,13 +83,11 @@ def train_net(args, hyp):
     
     for epoch in range(start_epoch, args.max_epochs):
         model_file_name = os.path.join(args.savedir, f'model_{epoch}.pth')
-        poly_lr_scheduler(args, hyp, optimizer, epoch)
-        for param_group in optimizer.param_groups:
-            lr = param_group['lr']
+        lr = poly_lr_scheduler(args, hyp, optimizers, epoch)
         print(f"Learning rate: {lr}")
         
         model.train()
-        ema = train(args, trainLoader, model, criteria, optimizer, epoch, scaler, args.verbose, ema if use_ema else None)
+        ema = train(args, trainLoader, model, criteria, optimizers, conv_weights, epoch, scaler, args.verbose, ema)
         
         model.eval()
         segment_results = val_one(valLoader, ema.ema if use_ema else model, args=args)
@@ -105,7 +102,7 @@ def train_net(args, hyp):
             'state_dict': model.state_dict(),
             'ema_state_dict': ema.ema.state_dict() if use_ema else None,
             'updates': ema.updates if use_ema else None,
-            'optimizer': optimizer.state_dict(),
+            'optimizer': {name: optimizer.state_dict() for name, optimizer in optimizers.items()},
             'lr': lr
         }, os.path.join(args.savedir, 'checkpoint.pth.tar'))
 

@@ -54,14 +54,45 @@ class AverageMeter(object):
         self.count += n
         self.avg = self.sum / self.count if self.count != 0 else 0
 
-def poly_lr_scheduler(args, hyp, optimizer, epoch, power=1.5):
+def build_optimizers(model, hyp):
+    matrices, vectors, conv_weights = [], [], []
+    for param in model.parameters():
+        if not param.requires_grad:
+            continue
+        if param.ndim > 2:
+            # Share storage so Muon updates the kernel without changing its model shape.
+            matrix = param.detach().view(param.shape[0], -1)
+            conv_weights.append((param, matrix))
+            matrices.append(matrix)
+        elif param.ndim == 2:
+            matrices.append(param)
+        else:
+            vectors.append(param)
+
+    options = dict(lr=hyp['lr'], weight_decay=hyp['weight_decay'])
+    return {
+        'muon': torch.optim.Muon(matrices, momentum=hyp['momentum'], adjust_lr_fn='match_rms_adamw', **options),
+        'adamw': torch.optim.AdamW(vectors, betas=(hyp['momentum'], 0.999), eps=hyp['eps'], **options),
+    }, conv_weights
+
+
+def load_optimizer_state(optimizers, state):
+    if 'param_groups' in state:
+        print("=> Legacy AdamW checkpoint: keeping model weights and resetting optimizer state.")
+        return
+    for name, optimizer in optimizers.items():
+        optimizer.load_state_dict(state[name])
+
+
+def poly_lr_scheduler(args, hyp, optimizers, epoch, power=1.5):
     lr = round(hyp['lr'] * (1 - epoch / args.max_epochs) ** power, 8)
-    for param_group in optimizer.param_groups:
-        param_group['lr'] = lr
+    for optimizer in optimizers.values():
+        for param_group in optimizer.param_groups:
+            param_group['lr'] = lr
     return lr
 
 
-def train(args, train_loader, model, criterion, optimizer, epoch,scaler,verbose=False,ema=None):
+def train(args, train_loader, model, criterion, optimizers, conv_weights, epoch, scaler, verbose=False, ema=None):
     model.train()
     device = next(model.parameters()).device
     print("epoch: ", epoch)
@@ -71,14 +102,17 @@ def train(args, train_loader, model, criterion, optimizer, epoch,scaler,verbose=
         LOGGER.info(('\n' + '%13s' * 4) % ('Epoch','TverskyLoss','FocalLoss' ,'TotalLoss'))
         pbar = tqdm(pbar, total=total_batches, bar_format='{l_bar}{bar:10}{r_bar}')
     for i, (_,input, target) in pbar:
-        optimizer.zero_grad()
+        model.zero_grad(set_to_none=True)
         input = input.to(device, dtype=torch.float32) / 255.0
         output = model(input)
         with torch.autocast(device.type, enabled=device.type == 'cuda'):
             focal_loss,tversky_loss,loss = criterion(output,target)
 
         scaler.scale(loss).backward()
-        scaler.step(optimizer)
+        for param, matrix in conv_weights:
+            matrix.grad = None if param.grad is None else param.grad.reshape_as(matrix)
+        for optimizer in optimizers.values():
+            scaler.step(optimizer)
         scaler.update()
         if ema is not None:
             ema.update(model)

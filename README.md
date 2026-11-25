@@ -109,6 +109,8 @@ Update the your dataset path in the `./BDD100K.py`.
 
 ## Training
 
+Training uses Muon for convolution and linear weights, and AdamW for biases and other one-dimensional parameters. Resuming from a legacy AdamW checkpoint keeps the model weights and epoch but starts with fresh optimizer state.
+
 ### Multi-task
 
 ```shell
