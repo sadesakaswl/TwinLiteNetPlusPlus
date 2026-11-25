@@ -9,7 +9,19 @@ import math
 from PIL import Image
 from skimage.filters import gaussian
 from skimage.restoration import denoise_bilateral
-import albumentations as A
+
+def random_crop(size, image, *masks):
+    crop_height, crop_width = size
+    height, width = image.shape[:2]
+    if not (0 < crop_height <= height and 0 < crop_width <= width):
+        raise ValueError(f"Crop size {size} does not fit image {(height, width)}")
+    if any(mask.shape[:2] != (height, width) for mask in masks):
+        raise ValueError("Image and masks must have matching spatial dimensions")
+    top = random.randint(0, height - crop_height)
+    left = random.randint(0, width - crop_width)
+    region = np.s_[top:top + crop_height, left:left + crop_width]
+    return tuple(array[region] for array in (image, *masks))
+
 def letterbox(im, new_shape=(640, 640), color=(114, 114, 114), auto=False, scaleFill=False, scaleup=True, stride=32):
     # Resize and pad image while meeting stride-multiple constraints
     shape = im.shape[:2]  # current shape [height, width]
@@ -156,7 +168,7 @@ class DatasetOneTask(torch.utils.data.Dataset):
         self.hgain = hyp["hgain"]
         self.sgain = hyp["sgain"]
         self.vgain = hyp["vgain"]
-        self.Random_Crop = A.RandomCrop(width=hyp["width_crop"], height=hyp["height_crop"])
+        self.crop_size = (hyp["height_crop"], hyp["width_crop"])
 
         self.prob_perspective = hyp["prob_perspective"]
         self.prob_flip = hyp["prob_flip"]
@@ -216,11 +228,7 @@ class DatasetOneTask(torch.utils.data.Dataset):
             if random.random() < self.prob_gaussian:
                 image = RandomGaussianBlur(image)
             if random.random() < self.prob_crop:
-                masks = np.stack([label, label],axis=2)
-                transformed = self.Random_Crop(image=image, mask=masks)
-                image = transformed['image']
-                labels = transformed['mask']
-                label = labels[:,:,0]
+                image, label = random_crop(self.crop_size, image, label)
 
             image = letterbox(image, (H_, W_))
         else:
@@ -258,7 +266,7 @@ class Dataset(torch.utils.data.Dataset):
         self.hgain = hyp["hgain"]
         self.sgain = hyp["sgain"]
         self.vgain = hyp["vgain"]
-        self.Random_Crop = A.RandomCrop(width=hyp["width_crop"], height=hyp["height_crop"])
+        self.crop_size = (hyp["height_crop"], hyp["width_crop"])
 
         self.prob_perspective = hyp["prob_perspective"]
         self.prob_flip = hyp["prob_flip"]
@@ -316,12 +324,7 @@ class Dataset(torch.utils.data.Dataset):
             if random.random() < self.prob_gaussian:
                 image = RandomGaussianBlur(image)
             if random.random() < self.prob_crop:
-                masks = np.stack([label1, label2],axis=2)
-                transformed = self.Random_Crop(image=image, mask=masks)
-                image = transformed['image']
-                labels = transformed['mask']
-                label1 = labels[:,:,0]
-                label2 = labels[:,:,1]
+                image, label1, label2 = random_crop(self.crop_size, image, label1, label2)
             image = letterbox(image, (H_, W_))
         else:
             image = letterbox(image, (H_, W_))
@@ -347,4 +350,3 @@ class Dataset(torch.utils.data.Dataset):
 
        
         return image_name,torch.from_numpy(image),(seg_da,seg_ll)
-

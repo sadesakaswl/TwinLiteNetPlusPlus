@@ -31,13 +31,13 @@ def validation(args):
     # Create validation data loader
     valLoader = torch.utils.data.DataLoader(
         BDD100K.Dataset(hyp, valid=True),
-        batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers, pin_memory=True)
+        batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers, pin_memory=cuda_available)
     
     # Print model parameter count
     print(f'Total network parameters: {netParams(model)}')
     
     # Load pretrained weights
-    model.load_state_dict(torch.load(args.weight))
+    model.load_state_dict(torch.load(args.weight, map_location='cpu', weights_only=True))
     model.eval()
     
     # Perform validation
@@ -55,7 +55,7 @@ if __name__ == '__main__':
     parser.add_argument('--batch_size', type=int, default=16, help='Batch size for validation')
     parser.add_argument('--config', type=str, choices=["nano", "small", "medium", "large"], help='Model configuration')
     parser.add_argument('--hyp', type=str, default='./hyperparameters/twinlitev2_hyper.yaml', help='Path to hyperparameters YAML file')
-    parser.add_argument('--half', action='store_true', help='Use half precision for inference')
+    parser.add_argument('--half', action='store_true', help='Use mixed precision for CUDA inference')
     parser.add_argument('--verbose', action='store_true', help='Enable verbose logging')
     
     # Parse arguments and run validation

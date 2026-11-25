@@ -63,6 +63,7 @@ def poly_lr_scheduler(args, hyp, optimizer, epoch, power=1.5):
 
 def train(args, train_loader, model, criterion, optimizer, epoch,scaler,verbose=False,ema=None):
     model.train()
+    device = next(model.parameters()).device
     print("epoch: ", epoch)
     total_batches = len(train_loader)
     pbar = enumerate(train_loader)
@@ -71,10 +72,9 @@ def train(args, train_loader, model, criterion, optimizer, epoch,scaler,verbose=
         pbar = tqdm(pbar, total=total_batches, bar_format='{l_bar}{bar:10}{r_bar}')
     for i, (_,input, target) in pbar:
         optimizer.zero_grad()
-        if args.onGPU == True:
-            input = input.cuda().float() / 255.0        
+        input = input.to(device, dtype=torch.float32) / 255.0
         output = model(input)
-        with torch.cuda.amp.autocast():
+        with torch.autocast(device.type, enabled=device.type == 'cuda'):
             focal_loss,tversky_loss,loss = criterion(output,target)
 
         scaler.scale(loss).backward()
@@ -94,6 +94,7 @@ def train(args, train_loader, model, criterion, optimizer, epoch,scaler,verbose=
 def val(val_loader = None, model = None, half = False, args=None):
 
     model.eval()
+    device = next(model.parameters()).device
 
     DA=SegmentationMetric(2)
     LL=SegmentationMetric(2)
@@ -111,14 +112,9 @@ def val(val_loader = None, model = None, half = False, args=None):
     if args.verbose:
         pbar = tqdm(pbar, total=total_batches)
     for i, (_,input, target) in pbar:
-        input = input.cuda().half() / 255.0 if half else input.cuda().float() / 255.0
-        
-        input_var = input
-        target_var = target
-
-        # run the mdoel
-        with torch.no_grad():
-            output = model(input_var)
+        input = input.to(device, dtype=torch.float32) / 255.0
+        with torch.autocast(device.type, enabled=half and device.type == 'cuda'):
+            output = model(input)
 
         ###-------------Drivable Segmetation--------------
         out_da = output[0]
@@ -171,6 +167,7 @@ def val(val_loader = None, model = None, half = False, args=None):
 def val_one(val_loader = None, model = None, half = False, args=None):
 
     model.eval()
+    device = next(model.parameters()).device
 
     RE=SegmentationMetric(2)
 
@@ -183,14 +180,9 @@ def val_one(val_loader = None, model = None, half = False, args=None):
     if args.verbose:
         pbar = tqdm(pbar, total=total_batches)
     for i, (_,input, target) in pbar:
-        input = input.cuda().half() / 255.0 if half else input.cuda().float() / 255.0
-        
-        input_var = input
-        target_var = target
-
-        # run the mdoel
-        with torch.no_grad():
-            output = model(input_var)
+        input = input.to(device, dtype=torch.float32) / 255.0
+        with torch.autocast(device.type, enabled=half and device.type == 'cuda'):
+            output = model(input)
 
 
 

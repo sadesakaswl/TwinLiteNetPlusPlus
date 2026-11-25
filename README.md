@@ -5,8 +5,8 @@
 
 
 [![Generic badge](https://img.shields.io/badge/License-MIT-<COLOR>.svg?style=for-the-badge)](https://github.com/chequanghuy/TwinLiteNetPlus/main/LICENSE) 
-[![PyTorch - Version](https://img.shields.io/badge/PYTORCH-1.8-red?style=for-the-badge&logo=pytorch)](https://pytorch.org/get-started/locally/) 
-[![Python - Version](https://img.shields.io/badge/PYTHON-3.8-red?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/downloads/)
+[![PyTorch - Version](https://img.shields.io/badge/PYTORCH-2.15-red?style=for-the-badge&logo=pytorch)](https://pytorch.org/get-started/locally/)
+[![Python - Version](https://img.shields.io/badge/PYTHON-3.14-red?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/downloads/)
 <br>
 
   [Quang-Huy Che](https://scholar.google.com/citations?user=k7lUdFAAAAAJ&hl=vi&authuser=2), [Duc-Tri Le](https://github.com/DucTriCE?tab=repositories), Minh-Quan Pham, Vinh-Tiep Nguyen, Duc-Khai Lam
@@ -67,21 +67,20 @@ Semantic segmentation is crucial for autonomous driving, particularly for Drivab
 - "--" indicates unavailable values.
 
 
-## Requirement
+## Installation
 
-This codebase has been developed with python version 3..8, PyTorch 1.8.0 and torchvision 0.9.0
-```setup
-pip install torch==1.8.0+cu111 torchvision==0.9.0+cu111 torchaudio==0.8.0 -f https://download.pytorch.org/whl/torch_stable.html
-```
-or
-```setup
-conda install pytorch==1.8.0 torchvision==0.9.0 torchaudio==0.8.0 -c pytorch
-```
-See `requirements.txt` for additional dependencies and version requirements.
-```setup
-pip install -r requirements.txt
+Use [uv](https://docs.astral.sh/uv/) with your system Python (tested on Linux with Python 3.14).
+Run these commands from the repository root for a fresh environment:
+
+```sh
+uv venv
+source .venv/bin/activate
+uv pip install -r requirements.txt
+uv pip check
 ```
 
+If you already have a clean `.venv` using that interpreter, skip the `uv venv` step.
+On Linux, the default PyTorch wheels use CUDA 13.2. GPU acceleration requires a compatible NVIDIA driver; the scripts fall back to CPU if CUDA is unavailable.
 
 ## Pre-trained Model
 You can get the pre-trained model from <a href="https://drive.google.com/drive/folders/1EqBzUw0b17aEumZmWYrGZmbx_XJqU-vz?usp=sharing">google</a>.
@@ -161,4 +160,3 @@ TwinLiteNetPlus is released under the [MIT Licence](LICENSE).
      url = {https://www.sciencedirect.com/science/article/pii/S0045790625006378}
 }
 ```
-

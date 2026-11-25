@@ -46,14 +46,13 @@ def train_net(args, hyp):
     
     trainLoader = torch.utils.data.DataLoader(
         BDD100K.DatasetOneTask(hyp, valid=False,task=args.task),
-        batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers, pin_memory=True)
+        batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers, pin_memory=cuda_available)
     
     valLoader = torch.utils.data.DataLoader(
         BDD100K.DatasetOneTask(hyp, valid=True,task=args.task),
-        batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers, pin_memory=True)
+        batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers, pin_memory=cuda_available)
     
     if cuda_available:
-        args.onGPU = True
         model = model.cuda()
         cudnn.benchmark = True
     
@@ -70,7 +69,7 @@ def train_net(args, hyp):
     if args.resume and os.path.isfile(args.resume):
         if args.resume.endswith(".tar"):
             print(f"=> Loading checkpoint '{args.resume}'")
-            checkpoint = torch.load(args.resume)
+            checkpoint = torch.load(args.resume, map_location='cpu', weights_only=True)
             start_epoch = checkpoint['epoch']
             model.load_state_dict(checkpoint['state_dict'])
             if use_ema:
@@ -81,7 +80,7 @@ def train_net(args, hyp):
         else:
             print(f"=> No valid checkpoint found at '{args.resume}'")
     
-    scaler = torch.cuda.amp.GradScaler()
+    scaler = torch.amp.GradScaler('cuda', enabled=cuda_available)
     
     for epoch in range(start_epoch, args.max_epochs):
         model_file_name = os.path.join(args.savedir, f'model_{epoch}.pth')

@@ -56,12 +56,11 @@ def show_seg_result(img, result, index, epoch, save_dir=None, is_ll=False,palett
 
 def detect(args):
 
-    device = "cuda:0"
-    half = True
-    model = TwinLiteNetPlus(args)
-    model = model.cuda()
-    if half:
-        model.half()  # to FP16
+    device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+    dtype = torch.float16 if device.type == 'cuda' else torch.float32
+    model = TwinLiteNetPlus(args).to(device=device, dtype=dtype)
+    model.load_state_dict(torch.load(args.weight, map_location='cpu', weights_only=True))
+    model.eval()
 
     # Set Dataloader
     if args.source.isnumeric():
@@ -78,17 +77,14 @@ def detect(args):
     t0 = time.time()
 
     vid_path, vid_writer = None, None
-    img = torch.zeros((1, 3, args.img_size, args.img_size), device=device)  # init img
-    _ = model(img.half() if half else img) if device != 'cpu' else None  # run once
-
-    model.load_state_dict(torch.load(args.weight))
-    model.eval()
+    if device.type == 'cuda':
+        model(torch.zeros((1, 3, args.img_size, args.img_size), device=device, dtype=dtype))
 
     
     for i, (path, img, img_det, vid_cap,shapes) in tqdm(enumerate(dataset),total = len(dataset)):
         if img.ndimension() == 3:
             img = img.unsqueeze(0)
-        img = img.cuda().half() / 255.0 if half else img.cuda().float() / 255.0
+        img = img.to(device=device, dtype=dtype) / 255.0
 
 
         _, _, height, width = img.shape
