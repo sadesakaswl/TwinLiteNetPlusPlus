@@ -82,6 +82,12 @@ uv pip check
 If you already have a clean `.venv` using that interpreter, skip the `uv venv` step.
 On Linux, the default PyTorch wheels use CUDA 13.2. GPU acceleration requires a compatible NVIDIA driver; the scripts fall back to CPU if CUDA is unavailable.
 
+For AMD GPUs on Linux with ROCm 10.1, replace the install command above with:
+
+```sh
+uv pip install -r requirements-rocm.txt
+```
+
 ## Pre-trained Model
 The [original weights](https://drive.google.com/drive/folders/1EqBzUw0b17aEumZmWYrGZmbx_XJqU-vz?usp=sharing) and checkpoints are incompatible. Use weights or checkpoints from the SiLU architecture.
 
