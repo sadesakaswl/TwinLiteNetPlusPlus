@@ -6,7 +6,7 @@ gamma2: 1.33333333333 #seg_tver_ll
 alpha3: 0.25 #seg_focal alpha
 gamma3: 2.0 #seg_focal gamma
 weight_decay: 0.0005  # optimizer weight decay 
-momentum: 0.9  # Muon momentum and AdamW beta1
+momentum: 0.9  # AdamW beta1; Muon uses its PyTorch default
 eps: 0.00000001 #eps
 ######################Augmentation
 degrees: 10 #Rotation

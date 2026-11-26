@@ -5,7 +5,7 @@ import torch
 from torch import nn
 
 from model.config import sc_ch_dict
-from model.model import SingleLiteNetPlus, TwinLiteNetPlus, UpConvBlock, model_from_weights
+from model.model import SingleLiteNetPlus, TwinLiteNetPlus, UpConvBlock
 from utils import build_optimizers, train
 
 
@@ -17,7 +17,7 @@ class ModelTest(unittest.TestCase):
                 with self.subTest(config=config, model=model_cls.__name__), torch.inference_mode():
                     model = model_cls(Namespace(config=config)).eval()
                     self.assertIsInstance(model.encoder.level1.act, nn.SiLU)
-                    self.assertFalse(any(isinstance(m, nn.ConvTranspose2d) for m in model.modules()))
+                    self.assertFalse(any(isinstance(m, (nn.PReLU, nn.ConvTranspose2d)) for m in model.modules()))
                     output = model(image)
                     heads = output if isinstance(output, tuple) else (output,)
                     self.assertEqual(len(heads), 2 if model_cls is TwinLiteNetPlus else 1)
@@ -34,17 +34,15 @@ class ModelTest(unittest.TestCase):
             expected = torch.tensor([-2., 3.]).view(1, 2, 1, 1).expand(1, 2, 8, 16)
             torch.testing.assert_close(head(torch.zeros(1, 8, 4, 8)), expected)
 
-    def test_weights_select_matching_architecture(self):
+    def test_model_weights_round_trip(self):
         args = Namespace(config='nano')
         image = torch.rand(1, 3, 32, 64)
         for model_cls in (TwinLiteNetPlus, SingleLiteNetPlus):
-            for legacy in (False, True):
-                with self.subTest(model=model_cls.__name__, legacy=legacy), torch.inference_mode():
-                    original = model_cls(args, legacy=legacy).eval()
-                    loaded = model_from_weights(model_cls, args, original.state_dict()).eval()
-                    activation = nn.PReLU if legacy else nn.SiLU
-                    self.assertIsInstance(loaded.encoder.level1.act, activation)
-                    torch.testing.assert_close(loaded(image), original(image))
+            with self.subTest(model=model_cls.__name__), torch.inference_mode():
+                original = model_cls(args).eval()
+                loaded = model_cls(args).eval()
+                loaded.load_state_dict(original.state_dict())
+                torch.testing.assert_close(loaded(image), original(image))
 
     def test_nano_updates_encoder_attention_and_heads_with_muon(self):
         torch.manual_seed(0)

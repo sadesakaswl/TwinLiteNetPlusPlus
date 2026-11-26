@@ -71,7 +71,7 @@ def build_optimizers(model, hyp):
 
     options = dict(lr=hyp['lr'], weight_decay=hyp['weight_decay'])
     return {
-        'muon': torch.optim.Muon(matrices, momentum=hyp['momentum'], adjust_lr_fn='match_rms_adamw', **options),
+        'muon': torch.optim.Muon(matrices, adjust_lr_fn='match_rms_adamw', **options),
         'adamw': torch.optim.AdamW(vectors, betas=(hyp['momentum'], 0.999), eps=hyp['eps'], **options),
     }, conv_weights
 
@@ -82,6 +82,9 @@ def load_optimizer_state(optimizers, state):
         return
     for name, optimizer in optimizers.items():
         optimizer.load_state_dict(state[name])
+    muon = optimizers['muon']
+    for group in muon.param_groups:
+        group['momentum'] = muon.defaults['momentum']
 
 
 def poly_lr_scheduler(args, hyp, optimizers, epoch, power=1.5):

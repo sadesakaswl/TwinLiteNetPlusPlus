@@ -7,7 +7,7 @@ import math
 from copy import deepcopy
 from argparse import ArgumentParser
 
-from model.model import TwinLiteNetPlus, model_from_weights
+from model.model import TwinLiteNetPlus
 from loss import TotalLoss
 from utils import build_optimizers, load_optimizer_state, train, val, netParams, save_checkpoint, poly_lr_scheduler
 import BDD100K
@@ -38,13 +38,12 @@ def train_net(args, hyp):
     cuda_available = torch.cuda.is_available()
     num_gpus = torch.cuda.device_count()
     
+    model = TwinLiteNetPlus(args)
+    checkpoint = None
     if args.resume:
         print(f"=> Loading checkpoint '{args.resume}'")
         checkpoint = torch.load(args.resume, map_location='cpu', weights_only=True)
-        model = model_from_weights(TwinLiteNetPlus, args, checkpoint['state_dict'])
-    else:
-        checkpoint = None
-        model = TwinLiteNetPlus(args)
+        model.load_state_dict(checkpoint['state_dict'])
     # if num_gpus > 1:
     #     model = torch.nn.DataParallel(model)
     

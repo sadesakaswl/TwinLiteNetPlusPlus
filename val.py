@@ -5,7 +5,7 @@ import yaml
 from argparse import ArgumentParser
 from pathlib import Path
 
-from model.model import TwinLiteNetPlus, model_from_weights
+from model.model import TwinLiteNetPlus
 from utils import val, netParams
 from loss import TotalLoss
 import BDD100K
@@ -19,7 +19,8 @@ def validation(args):
     
     # Initialize model
     weights = torch.load(args.weight, map_location='cpu', weights_only=True)
-    model = model_from_weights(TwinLiteNetPlus, args, weights)
+    model = TwinLiteNetPlus(args)
+    model.load_state_dict(weights)
     cuda_available = torch.cuda.is_available()
     if cuda_available:
         model = model.cuda()
@@ -49,7 +50,7 @@ def validation(args):
 
 if __name__ == '__main__':
     parser = ArgumentParser()
-    parser.add_argument('--weight', type=str, default="pretrained/large.pth", help='Path to model weights')
+    parser.add_argument('--weight', type=str, required=True, help='Path to trained model weights')
     parser.add_argument('--num_workers', type=int, default=12, help='Number of parallel threads')
     parser.add_argument('--batch_size', type=int, default=16, help='Batch size for validation')
     parser.add_argument('--config', type=str, choices=["nano", "small", "medium", "large"], help='Model configuration')

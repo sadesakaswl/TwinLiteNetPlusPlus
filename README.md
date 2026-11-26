@@ -83,7 +83,7 @@ If you already have a clean `.venv` using that interpreter, skip the `uv venv` s
 On Linux, the default PyTorch wheels use CUDA 13.2. GPU acceleration requires a compatible NVIDIA driver; the scripts fall back to CPU if CUDA is unavailable.
 
 ## Pre-trained Model
-You can get the original pre-trained weights from <a href="https://drive.google.com/drive/folders/1EqBzUw0b17aEumZmWYrGZmbx_XJqU-vz?usp=sharing">Google Drive</a>. Evaluation and demo load them with the original architecture.
+The [original weights](https://drive.google.com/drive/folders/1EqBzUw0b17aEumZmWYrGZmbx_XJqU-vz?usp=sharing) and checkpoints are incompatible. Use weights or checkpoints from the SiLU architecture.
 
 
 ## Dataset
@@ -111,8 +111,6 @@ Update the your dataset path in the `./BDD100K.py`.
 
 Fresh runs use SiLU, scaled dot-product attention in CAAM, and standard convolution kernels in the decoder. The decoder uses bilinear feature upsampling and a pixel-shuffle output projection to produce raw segmentation logits. Muon updates convolution and linear weights; AdamW handles biases and other one-dimensional parameters.
 
-Resuming an original checkpoint keeps its original architecture. To train the updated architecture, start a fresh run without `--resume`. Resuming an AdamW-only checkpoint still keeps the model weights and epoch but starts with fresh optimizer state.
-
 ### Multi-task
 
 ```shell
@@ -128,13 +126,13 @@ python train_singletask.py --ema --config '{nano/small/medium/large}' --task '{"
 ## Evaluation
 
 ```shell
-python val.py --config '{nano/small/medium/large}' --weight 'pretrained/{nano/small/medium/large}.pth'
+python val.py --config nano --weight ./testv3/model_0.pth
 ```
 
 ## Demo
 
 ```shell
-python demo.py --config '{nano/small/medium/large}' --weight 'pretrained/{nano/small/medium/large}.pth' --source 'pretrained/{images/videos}'
+python demo.py --config nano --weight ./testv3/model_0.pth --source ./inference/images
 ```
 
 

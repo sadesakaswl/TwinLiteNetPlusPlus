@@ -15,6 +15,9 @@ class MuonTrainingTest(unittest.TestCase):
         hyp = {'lr': 0.01, 'momentum': 0.9, 'weight_decay': 0.0, 'eps': 1e-8}
         args = Namespace(max_epochs=4)
         optimizers, conv_weights = build_optimizers(model, hyp)
+        default_momentum = torch.optim.Muon([model[-1].weight]).defaults['momentum']
+        self.assertEqual(optimizers['muon'].param_groups[0]['momentum'], default_momentum)
+        self.assertEqual(optimizers['adamw'].param_groups[0]['betas'], (0.9, 0.999))
         before = [p.detach().clone() for p in model.parameters()]
         batch = (None, torch.randint(0, 256, (2, 2, 4, 4)), torch.zeros(2, 2))
 
@@ -36,7 +39,9 @@ class MuonTrainingTest(unittest.TestCase):
         legacy = torch.optim.AdamW(model.parameters()).state_dict()
         load_optimizer_state(fresh, legacy)
         self.assertTrue(all(not optimizer.state for optimizer in fresh.values()))
-        load_optimizer_state(fresh, saved)
+        old_muon = deepcopy(saved)
+        old_muon['muon']['param_groups'][0]['momentum'] = 0.9
+        load_optimizer_state(fresh, old_muon)
         for name, optimizer in fresh.items():
             reloaded = optimizer.state_dict()
             self.assertEqual(saved[name]['param_groups'], reloaded['param_groups'])

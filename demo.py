@@ -6,7 +6,7 @@ from argparse import ArgumentParser
 from pathlib import Path
 import cv2
 
-from model.model import TwinLiteNetPlus, model_from_weights
+from model.model import TwinLiteNetPlus
 from utils import val, netParams
 from loss import TotalLoss
 from demoDataset import LoadImages, LoadStreams
@@ -59,8 +59,9 @@ def detect(args):
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
     dtype = torch.float16 if device.type == 'cuda' else torch.float32
     weights = torch.load(args.weight, map_location='cpu', weights_only=True)
-    model = model_from_weights(TwinLiteNetPlus, args, weights).to(device=device, dtype=dtype)
-    model.eval()
+    model = TwinLiteNetPlus(args)
+    model.load_state_dict(weights)
+    model.to(device=device, dtype=dtype).eval()
 
     # Set Dataloader
     if args.source.isnumeric():
@@ -142,7 +143,7 @@ def detect(args):
 
 if __name__ == '__main__':
     parser = ArgumentParser()
-    parser.add_argument('--weight', type=str, default='pretrained/large.pth', help='model.pth path(s)')
+    parser.add_argument('--weight', type=str, required=True, help='Path to trained model weights')
     parser.add_argument('--source', type=str, default='inference/videos', help='source')  # file/folder   ex:inference/images
     parser.add_argument('--img-size', type=int, default=640, help='inference size (pixels)')
     parser.add_argument('--config', type=str, choices=["nano", "small", "medium", "large"], help='Model configuration')

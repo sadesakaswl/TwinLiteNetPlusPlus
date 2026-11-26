@@ -41,15 +41,11 @@ def patch_recover(input, bin_size):
     return out
 
 
-def _activation(channels, legacy):
-    return nn.PReLU(channels) if legacy else nn.SiLU()
-
-
 class GCN(nn.Module):
-    def __init__(self, num_node, num_channel, legacy=False):
+    def __init__(self, num_node, num_channel):
         super(GCN, self).__init__()
         self.conv1 = nn.Conv2d(num_node, num_node, kernel_size=1, bias=False)
-        self.relu = _activation(num_node, legacy)
+        self.relu = nn.SiLU()
         self.conv2 = nn.Linear(num_channel, num_channel, bias=False)
     def forward(self, x):
         # x: [B, bin_num_h * bin_num_w, K, C]
@@ -61,10 +57,9 @@ class CAAM(nn.Module):
     """
     Class Activation Attention Module
     """
-    def __init__(self, feat_in, num_classes, bin_size, norm_layer, legacy=False):
+    def __init__(self, feat_in, num_classes, bin_size, norm_layer):
         super(CAAM, self).__init__()
         feat_inner = feat_in // 2
-        self.legacy = legacy
         self.norm_layer = norm_layer
         self.bin_size = bin_size
         self.dropout = nn.Dropout2d(0.1)
@@ -73,7 +68,7 @@ class CAAM(nn.Module):
         self.sigmoid = nn.Sigmoid()
 
         bin_num = bin_size[0] * bin_size[1]
-        self.gcn = GCN(bin_num, feat_in, legacy=legacy)
+        self.gcn = GCN(bin_num, feat_in)
         self.fuse = nn.Conv2d(bin_num, 1, kernel_size=1)
         self.proj_query = nn.Linear(feat_in, feat_inner)
         self.proj_key = nn.Linear(feat_in, feat_inner)
@@ -82,9 +77,9 @@ class CAAM(nn.Module):
         self.conv_out = nn.Sequential(
             nn.Conv2d(feat_inner, feat_in, kernel_size=1, bias=False),
             norm_layer(feat_in),
-            _activation(feat_in, legacy)
+            nn.SiLU()
         )
-        self.relu = _activation(1, legacy)
+        self.relu = nn.SiLU()
 
     def forward(self, x):
         cam = self.conv_cam(x) # [B, K, H, W]
@@ -114,11 +109,7 @@ class CAAM(nn.Module):
         key = self.proj_key(local_feats) # [B, bin_num_h * bin_num_w, K, C//2]
         value = self.proj_value(global_feats) # [B, bin_num_h * bin_num_w, K, C//2]
         
-        if self.legacy:
-            aff_map = torch.matmul(query, key.transpose(2, 3))
-            out = torch.matmul(F.softmax(aff_map, dim=-1), value)
-        else:
-            out = F.scaled_dot_product_attention(query, key, value)
+        out = F.scaled_dot_product_attention(query, key, value)
         
         out = out.view(B, -1, rH, rW, value.shape[-1]) # [B, bin_num_h * bin_num_w, rH, rW, C]
         out = patch_recover(out, self.bin_size) # [B, C, H, W]
@@ -135,7 +126,7 @@ class ConvNormAct(nn.Module):
     Convolution followed by batch normalization and activation.
     '''
 
-    def __init__(self, nIn, nOut, kSize=3, stride=1, groups=1, dropout_rate=0.0, legacy=False):
+    def __init__(self, nIn, nOut, kSize=3, stride=1, groups=1, dropout_rate=0.0):
         '''
 
         :param nIn: number of input channels
@@ -147,7 +138,7 @@ class ConvNormAct(nn.Module):
         padding = int((kSize - 1) / 2)
         self.conv = nn.Conv2d(nIn, nOut, kSize, stride=stride, padding=padding, bias=False, groups=groups)
         self.bn = nn.BatchNorm2d(nOut)
-        self.act = _activation(nOut, legacy)
+        self.act = nn.SiLU()
         self.dropout = nn.Dropout2d(dropout_rate) if dropout_rate > 0 else None
 
     def forward(self, input):
@@ -220,14 +211,14 @@ class BatchNormAct(nn.Module):
     '''
     Batch normalization followed by activation.
     '''
-    def __init__(self, nOut, legacy=False):
+    def __init__(self, nOut):
         '''
         :param nOut: output feature maps
         '''
         super().__init__()
         self.nOut=nOut
         self.bn = nn.BatchNorm2d(nOut, eps=1e-03)
-        self.act = _activation(nOut, legacy)
+        self.act = nn.SiLU()
 
     def forward(self, input):
         '''
@@ -252,7 +243,7 @@ class DepthwiseSeparableConv(nn.Module):
         return x
 
 class StrideESP(nn.Module):
-    def __init__(self, nIn, nOut, legacy=False):
+    def __init__(self, nIn, nOut):
         super().__init__()
         n = int(nOut/5)
         n1 = nOut - 4*n
@@ -263,7 +254,7 @@ class StrideESP(nn.Module):
         self.d8 = DilatedConv(n, n, 3, 1, 8)
         self.d16 = DilatedConv(n, n, 3, 1, 16)
         self.bn = nn.BatchNorm2d(nOut, eps=1e-3)
-        self.act = _activation(nOut, legacy)
+        self.act = nn.SiLU()
 
     def forward(self, input):
         output1 = self.c1(input)
@@ -291,7 +282,7 @@ class DepthwiseESP(nn.Module):
     This class defines the ESP block, which is based on the following principle
         Reduce ---> Split ---> Transform --> Merge
     '''
-    def __init__(self, nIn, nOut, add=True, legacy=False):
+    def __init__(self, nIn, nOut, add=True):
         '''
         :param nIn: number of input channels
         :param nOut: number of output channels
@@ -302,16 +293,13 @@ class DepthwiseESP(nn.Module):
         super().__init__()
         n = max(int(nOut/5),1)
         n1 = max(nOut - 4*n,1)
-        self.c1 = (
-            DepthwiseSeparableConv(nIn, n, 1, 1) if legacy
-            else nn.Conv2d(nIn, n, 1, bias=False)
-        )
+        self.c1 = nn.Conv2d(nIn, n, 1, bias=False)
         self.d1 = DepthwiseSeparableConv(n, n1, 3, 1, 1) # dilation rate of 2^0
         self.d2 = DepthwiseSeparableConv(n, n, 3, 1, 2) # dilation rate of 2^1
         self.d4 = DepthwiseSeparableConv(n, n, 3, 1, 4) # dilation rate of 2^2
         self.d8 = DepthwiseSeparableConv(n, n, 3, 1, 8) # dilation rate of 2^3
         self.d16 = DepthwiseSeparableConv(n, n, 3, 1, 16) # dilation rate of 2^4
-        self.bn = BatchNormAct(nOut, legacy=legacy)
+        self.bn = BatchNormAct(nOut)
         self.add = add
 
     def forward(self, input):
@@ -369,27 +357,27 @@ class Encoder(nn.Module):
     '''
     This class defines the ESPNet-C network in the paper
     '''
-    def __init__(self, config, legacy=False):
+    def __init__(self, config):
         super().__init__()
         chanel_img = cfg.chanel_img
         model_cfg = cfg.sc_ch_dict[config] 
-        self.level1 = ConvNormAct(chanel_img, model_cfg['chanels'][0], stride=2, legacy=legacy)
+        self.level1 = ConvNormAct(chanel_img, model_cfg['chanels'][0], stride=2)
         self.sample1 = AvgDownsampler(1)
         self.sample2 = AvgDownsampler(2)
 
-        self.b1 = ConvNormAct(model_cfg['chanels'][0] + chanel_img, model_cfg['chanels'][1], legacy=legacy)
-        self.level2_0 = StrideESP(model_cfg['chanels'][1], model_cfg['chanels'][2], legacy=legacy)
+        self.b1 = ConvNormAct(model_cfg['chanels'][0] + chanel_img, model_cfg['chanels'][1])
+        self.level2_0 = StrideESP(model_cfg['chanels'][1], model_cfg['chanels'][2])
 
         self.level2 = nn.ModuleList()
         for i in range(0, model_cfg['p']):
-            self.level2.append(DepthwiseESP(model_cfg['chanels'][2], model_cfg['chanels'][2], legacy=legacy))
-        self.b2 = ConvNormAct(model_cfg['chanels'][3] + chanel_img, model_cfg['chanels'][3] + chanel_img, legacy=legacy)
+            self.level2.append(DepthwiseESP(model_cfg['chanels'][2], model_cfg['chanels'][2]))
+        self.b2 = ConvNormAct(model_cfg['chanels'][3] + chanel_img, model_cfg['chanels'][3] + chanel_img)
 
-        self.level3_0 = StrideESP(model_cfg['chanels'][3] + chanel_img, model_cfg['chanels'][3], legacy=legacy)
+        self.level3_0 = StrideESP(model_cfg['chanels'][3] + chanel_img, model_cfg['chanels'][3])
         self.level3 = nn.ModuleList()
         for i in range(0, model_cfg['q']):
-            self.level3.append(DepthwiseESP(model_cfg['chanels'][3], model_cfg['chanels'][3], legacy=legacy))
-        self.b3 = ConvNormAct(model_cfg['chanels'][4], model_cfg['chanels'][2], legacy=legacy)
+            self.level3.append(DepthwiseESP(model_cfg['chanels'][3], model_cfg['chanels'][3]))
+        self.b3 = ConvNormAct(model_cfg['chanels'][4], model_cfg['chanels'][2])
         
     def forward(self, input):
         '''
@@ -420,26 +408,11 @@ class Encoder(nn.Module):
         
         return out_encoder,inp1,inp2
 
-class UpSimpleBlock(nn.Module):
-    def __init__(self, in_channels, out_channels):
-        super().__init__()
-        self.deconv = nn.ConvTranspose2d(in_channels, out_channels, 2, stride=2, padding=0, output_padding=0, bias=False)
-        self.bn = nn.BatchNorm2d(out_channels, eps=1e-03)
-        self.act = nn.PReLU(out_channels)
-
-    def forward(self, input):
-        output = self.deconv(input)
-        output = self.bn(output)
-        output = self.act(output)
-        return output
-
 class UpConvBlock(nn.Module):
-    def __init__(self, in_channels, out_channels, sub_dim=3, last=False, kernel_size=3, legacy=False):
+    def __init__(self, in_channels, out_channels, sub_dim=3, last=False, kernel_size=3):
         super(UpConvBlock, self).__init__()
         self.last = last
-        if legacy:
-            self.up_conv = UpSimpleBlock(in_channels, out_channels)
-        elif last:
+        if last:
             self.up_conv = nn.Sequential(
                 nn.Conv2d(in_channels, out_channels * 4, 1),
                 nn.PixelShuffle(2),
@@ -450,11 +423,8 @@ class UpConvBlock(nn.Module):
                 nn.Upsample(scale_factor=2, mode='bilinear', align_corners=False),
             )
         if not last:
-            self.conv1 = ConvNormAct(out_channels + sub_dim, out_channels, kernel_size, legacy=legacy)
-        self.conv2 = (
-            nn.Identity() if last and not legacy
-            else ConvNormAct(out_channels, out_channels, kernel_size, legacy=legacy)
-        )
+            self.conv1 = ConvNormAct(out_channels + sub_dim, out_channels, kernel_size)
+        self.conv2 = nn.Identity() if last else ConvNormAct(out_channels, out_channels, kernel_size)
 
     def forward(self, x, ori_img=None):
         x = self.up_conv(x)
@@ -469,17 +439,17 @@ class SingleLiteNetPlus(nn.Module):
     This class defines the ESPNet network
     '''
 
-    def __init__(self, args=None, *, legacy=False):
+    def __init__(self, args=None):
 
         super().__init__()
         c1, c2, c3, _, _ = cfg.sc_ch_dict[args.config]['chanels']
-        self.encoder = Encoder(args.config, legacy=legacy)
-        self.caam = CAAM(c3, c3, bin_size=(2, 4), norm_layer=nn.BatchNorm2d, legacy=legacy)
-        self.conv_caam = ConvNormAct(c3, c2, legacy=legacy)
+        self.encoder = Encoder(args.config)
+        self.caam = CAAM(c3, c3, bin_size=(2, 4), norm_layer=nn.BatchNorm2d)
+        self.conv_caam = ConvNormAct(c3, c2)
 
-        self.up_1 = UpConvBlock(c2, c1, legacy=legacy)
-        self.up_2 = UpConvBlock(c1, 8, legacy=legacy)
-        self.out = UpConvBlock(8, 2, last=True, legacy=legacy)
+        self.up_1 = UpConvBlock(c2, c1)
+        self.up_2 = UpConvBlock(c1, 8)
+        self.out = UpConvBlock(8, 2, last=True)
 
 
     def forward(self, input):
@@ -506,24 +476,24 @@ class TwinLiteNetPlus(nn.Module):
     This class defines the ESPNet network
     '''
 
-    def __init__(self, args=None, *, legacy=False):
+    def __init__(self, args=None):
 
         super().__init__()
         c1, c2, c3, _, _ = cfg.sc_ch_dict[args.config]['chanels']
-        self.encoder = Encoder(args.config, legacy=legacy)
+        self.encoder = Encoder(args.config)
         self.sigle_ll = False
         self.sigle_da = False
 
-        self.caam = CAAM(c3, c3, bin_size=(2, 4), norm_layer=nn.BatchNorm2d, legacy=legacy)
-        self.conv_caam = ConvNormAct(c3, c2, legacy=legacy)
+        self.caam = CAAM(c3, c3, bin_size=(2, 4), norm_layer=nn.BatchNorm2d)
+        self.conv_caam = ConvNormAct(c3, c2)
 
-        self.up_1_da = UpConvBlock(c2, c1, legacy=legacy)
-        self.up_2_da = UpConvBlock(c1, 8, legacy=legacy)
-        self.out_da = UpConvBlock(8, 2, last=True, legacy=legacy)
+        self.up_1_da = UpConvBlock(c2, c1)
+        self.up_2_da = UpConvBlock(c1, 8)
+        self.out_da = UpConvBlock(8, 2, last=True)
 
-        self.up_1_ll = UpConvBlock(c2, c1, legacy=legacy)
-        self.up_2_ll = UpConvBlock(c1, 8, legacy=legacy)
-        self.out_ll = UpConvBlock(8, 2, last=True, legacy=legacy)
+        self.up_1_ll = UpConvBlock(c2, c1)
+        self.up_2_ll = UpConvBlock(c1, 8)
+        self.out_ll = UpConvBlock(8, 2, last=True)
 
 
     def forward(self, input):
@@ -547,14 +517,6 @@ class TwinLiteNetPlus(nn.Module):
 
 
         return out_da,out_ll
-
-
-def model_from_weights(model_cls, args, state_dict):
-    # Only the original stem has a learnable activation weight.
-    legacy = 'encoder.level1.act.weight' in state_dict
-    model = model_cls(args, legacy=legacy)
-    model.load_state_dict(state_dict)
-    return model
 
 
 def netParams(model):
