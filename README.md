@@ -83,7 +83,7 @@ If you already have a clean `.venv` using that interpreter, skip the `uv venv` s
 On Linux, the default PyTorch wheels use CUDA 13.2. GPU acceleration requires a compatible NVIDIA driver; the scripts fall back to CPU if CUDA is unavailable.
 
 ## Pre-trained Model
-You can get the pre-trained model from <a href="https://drive.google.com/drive/folders/1EqBzUw0b17aEumZmWYrGZmbx_XJqU-vz?usp=sharing">google</a>.
+You can get the original pre-trained weights from <a href="https://drive.google.com/drive/folders/1EqBzUw0b17aEumZmWYrGZmbx_XJqU-vz?usp=sharing">Google Drive</a>. Evaluation and demo load them with the original architecture.
 
 
 ## Dataset
@@ -109,7 +109,9 @@ Update the your dataset path in the `./BDD100K.py`.
 
 ## Training
 
-Training uses Muon for convolution and linear weights, and AdamW for biases and other one-dimensional parameters. Resuming from a legacy AdamW checkpoint keeps the model weights and epoch but starts with fresh optimizer state.
+Fresh runs use SiLU, scaled dot-product attention in CAAM, and standard convolution kernels in the decoder. The decoder uses bilinear feature upsampling and a pixel-shuffle output projection to produce raw segmentation logits. Muon updates convolution and linear weights; AdamW handles biases and other one-dimensional parameters.
+
+Resuming an original checkpoint keeps its original architecture. To train the updated architecture, start a fresh run without `--resume`. Resuming an AdamW-only checkpoint still keeps the model weights and epoch but starts with fresh optimizer state.
 
 ### Multi-task
 

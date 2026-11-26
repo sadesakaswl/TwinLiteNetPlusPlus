@@ -5,7 +5,7 @@ import yaml
 from argparse import ArgumentParser
 from pathlib import Path
 
-from model.model import TwinLiteNetPlus
+from model.model import TwinLiteNetPlus, model_from_weights
 from utils import val, netParams
 from loss import TotalLoss
 import BDD100K
@@ -18,7 +18,8 @@ def validation(args):
     """
     
     # Initialize model
-    model = TwinLiteNetPlus(args)
+    weights = torch.load(args.weight, map_location='cpu', weights_only=True)
+    model = model_from_weights(TwinLiteNetPlus, args, weights)
     cuda_available = torch.cuda.is_available()
     if cuda_available:
         model = model.cuda()
@@ -36,8 +37,6 @@ def validation(args):
     # Print model parameter count
     print(f'Total network parameters: {netParams(model)}')
     
-    # Load pretrained weights
-    model.load_state_dict(torch.load(args.weight, map_location='cpu', weights_only=True))
     model.eval()
     
     # Perform validation

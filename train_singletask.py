@@ -7,7 +7,7 @@ import math
 from copy import deepcopy
 from argparse import ArgumentParser
 
-from model.model import SingleLiteNetPlus
+from model.model import SingleLiteNetPlus, model_from_weights
 from loss import SigleLoss
 from utils import build_optimizers, load_optimizer_state, train, val_one, netParams, save_checkpoint, poly_lr_scheduler
 import BDD100K
@@ -38,7 +38,13 @@ def train_net(args, hyp):
     cuda_available = torch.cuda.is_available()
     num_gpus = torch.cuda.device_count()
     
-    model = SingleLiteNetPlus(args)
+    if args.resume:
+        print(f"=> Loading checkpoint '{args.resume}'")
+        checkpoint = torch.load(args.resume, map_location='cpu', weights_only=True)
+        model = model_from_weights(SingleLiteNetPlus, args, checkpoint['state_dict'])
+    else:
+        checkpoint = None
+        model = SingleLiteNetPlus(args)
     # if num_gpus > 1:
     #     model = torch.nn.DataParallel(model)
     
@@ -65,19 +71,13 @@ def train_net(args, hyp):
     ema = ModelEMA(model) if use_ema else None
     
     # Resume training from checkpoint
-    if args.resume and os.path.isfile(args.resume):
-        if args.resume.endswith(".tar"):
-            print(f"=> Loading checkpoint '{args.resume}'")
-            checkpoint = torch.load(args.resume, map_location='cpu', weights_only=True)
-            start_epoch = checkpoint['epoch']
-            model.load_state_dict(checkpoint['state_dict'])
-            if use_ema:
-                ema.ema.load_state_dict(checkpoint['ema_state_dict'])
-                ema.updates = checkpoint['updates']
-            load_optimizer_state(optimizers, checkpoint['optimizer'])
-            print(f"=> Loaded checkpoint '{args.resume}' (epoch {checkpoint['epoch']})")
-        else:
-            print(f"=> No valid checkpoint found at '{args.resume}'")
+    if checkpoint is not None:
+        start_epoch = checkpoint['epoch']
+        if use_ema:
+            ema.ema.load_state_dict(checkpoint['ema_state_dict'])
+            ema.updates = checkpoint['updates']
+        load_optimizer_state(optimizers, checkpoint['optimizer'])
+        print(f"=> Loaded checkpoint '{args.resume}' (epoch {start_epoch})")
     
     scaler = torch.amp.GradScaler('cuda', enabled=cuda_available)
     

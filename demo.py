@@ -6,7 +6,7 @@ from argparse import ArgumentParser
 from pathlib import Path
 import cv2
 
-from model.model import TwinLiteNetPlus
+from model.model import TwinLiteNetPlus, model_from_weights
 from utils import val, netParams
 from loss import TotalLoss
 from demoDataset import LoadImages, LoadStreams
@@ -58,8 +58,8 @@ def detect(args):
 
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
     dtype = torch.float16 if device.type == 'cuda' else torch.float32
-    model = TwinLiteNetPlus(args).to(device=device, dtype=dtype)
-    model.load_state_dict(torch.load(args.weight, map_location='cpu', weights_only=True))
+    weights = torch.load(args.weight, map_location='cpu', weights_only=True)
+    model = model_from_weights(TwinLiteNetPlus, args, weights).to(device=device, dtype=dtype)
     model.eval()
 
     # Set Dataloader
