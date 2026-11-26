@@ -70,23 +70,23 @@ Semantic segmentation is crucial for autonomous driving, particularly for Drivab
 ## Installation
 
 Use [uv](https://docs.astral.sh/uv/) with your system Python (tested on Linux with Python 3.14).
-Run these commands from the repository root for a fresh environment:
+Run these commands from the repository root, substituting the requirements file for your hardware. This example uses CUDA:
 
 ```sh
 uv venv
 source .venv/bin/activate
-uv pip install -r requirements.txt
+uv pip install -r requirements-cuda.txt
 uv pip check
 ```
 
 If you already have a clean `.venv` using that interpreter, skip the `uv venv` step.
-On Linux, the default PyTorch wheels use CUDA 13.2. GPU acceleration requires a compatible NVIDIA driver; the scripts fall back to CPU if CUDA is unavailable.
+Choose the requirements file that matches your hardware:
 
-For AMD GPUs on Linux with ROCm 10.1, replace the install command above with:
-
-```sh
-uv pip install -r requirements-rocm.txt
-```
+| Backend | Requirements file |
+| --- | --- |
+| NVIDIA GPU with a CUDA 13.2-compatible driver | `requirements-cuda.txt` |
+| AMD GPU on Linux with ROCm 10.1 | `requirements-rocm.txt` |
+| CPU only (Linux) | `requirements-cpu.txt` |
 
 ## Pre-trained Model
 The [original weights](https://drive.google.com/drive/folders/1EqBzUw0b17aEumZmWYrGZmbx_XJqU-vz?usp=sharing) and checkpoints are incompatible. Use weights or checkpoints from the SiLU architecture.
