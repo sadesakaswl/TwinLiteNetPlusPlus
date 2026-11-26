@@ -23,6 +23,8 @@ class ModelEMA:
 
     def update(self, model):
         """Update EMA model parameters"""
+        if isinstance(model, torch.nn.DataParallel):
+            model = model.module
         with torch.no_grad():
             self.updates += 1
             d = self.decay(self.updates)
@@ -36,7 +38,7 @@ def train_net(args, hyp):
     """Train the neural network model with given arguments and hyperparameters"""
     use_ema = args.ema
     cuda_available = torch.cuda.is_available()
-    num_gpus = torch.cuda.device_count()
+    num_gpus = torch.cuda.device_count() if cuda_available else 0
     
     model = TwinLiteNetPlus(args)
     checkpoint = None
@@ -44,9 +46,7 @@ def train_net(args, hyp):
         print(f"=> Loading checkpoint '{args.resume}'")
         checkpoint = torch.load(args.resume, map_location='cpu', weights_only=True)
         model.load_state_dict(checkpoint['state_dict'])
-    # if num_gpus > 1:
-    #     model = torch.nn.DataParallel(model)
-    
+
     os.makedirs(args.savedir, exist_ok=True)  # Ensure save directory exists
     
     trainLoader = torch.utils.data.DataLoader(
@@ -58,7 +58,7 @@ def train_net(args, hyp):
         batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers, pin_memory=cuda_available)
     
     if cuda_available:
-        model = model.cuda()
+        model = model.cuda(0)
         cudnn.benchmark = True
     
     print(f'Total network parameters: {netParams(model)}')
@@ -77,7 +77,15 @@ def train_net(args, hyp):
             ema.updates = checkpoint['updates']
         load_optimizer_state(optimizers, checkpoint['optimizer'])
         print(f"=> Loaded checkpoint '{args.resume}' (epoch {start_epoch})")
-    
+
+    # shortcut: DataParallel gathers outputs on GPU 0; use DDP if that becomes a bottleneck.
+    train_model = model
+    eval_model = ema.ema if use_ema else model
+    if num_gpus > 1:
+        train_model = torch.nn.DataParallel(model)
+        eval_model = torch.nn.DataParallel(ema.ema) if use_ema else train_model
+        print(f"Using {num_gpus} GPUs for training and validation")
+
     scaler = torch.amp.GradScaler('cuda', enabled=cuda_available)
     
     for epoch in range(start_epoch, args.max_epochs):
@@ -85,11 +93,8 @@ def train_net(args, hyp):
         lr = poly_lr_scheduler(args, hyp, optimizers, epoch)
         print(f"Learning rate: {lr}")
         
-        model.train()
-        ema = train(args, trainLoader, model, criteria, optimizers, conv_weights, epoch, scaler, args.verbose, ema)
-        
-        model.eval()
-        da_segment_results, ll_segment_results = val(valLoader, ema.ema if use_ema else model, args=args)
+        ema = train(args, trainLoader, train_model, criteria, optimizers, conv_weights, epoch, scaler, args.verbose, ema)
+        da_segment_results, ll_segment_results = val(valLoader, eval_model, args=args)
         
         print(f"Driving Area Segment: mIOU({da_segment_results[2]:.3f})")
         print(f"Lane Line Segment: Acc({ll_segment_results[0]:.3f}) IOU({ll_segment_results[1]:.3f})")
