@@ -34,7 +34,7 @@ class SigleLoss(nn.Module):
         out=outputs[:,:,12:-12]
 
         _,seg= torch.max(targets, 1)
-        seg=seg.to(out.device)
+        seg=seg.to(out.device, non_blocking=True)
 
 
         tversky_loss = self.seg_tver(out, seg)
@@ -68,10 +68,10 @@ class TotalLoss(nn.Module):
         out_da,out_ll=out_da[:,:,12:-12],out_ll[:,:,12:-12]
 
         _,seg_da= torch.max(seg_da, 1)
-        seg_da=seg_da.to(out_da.device)
+        seg_da=seg_da.to(out_da.device, non_blocking=True)
 
         _,seg_ll= torch.max(seg_ll, 1)
-        seg_ll=seg_ll.to(out_ll.device)
+        seg_ll=seg_ll.to(out_ll.device, non_blocking=True)
 
         tversky_da_loss,tversky_ll_loss = self.seg_tver_da(out_da, seg_da), self.seg_tver_ll(out_ll, seg_ll)
         focal_da_loss, focal_ll_loss = self.seg_focal(out_da, seg_da),self.seg_focal(out_ll, seg_ll)

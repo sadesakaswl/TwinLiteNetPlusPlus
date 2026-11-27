@@ -107,7 +107,7 @@ def train(args, train_loader, model, criterion, optimizers, conv_weights, epoch,
         pbar = tqdm(pbar, total=total_batches, bar_format='{l_bar}{bar:10}{r_bar}')
     for i, (_,input, target) in pbar:
         model.zero_grad(set_to_none=True)
-        input = input.to(device, dtype=torch.float32) / 255.0
+        input = input.to(device, dtype=torch.float32, non_blocking=True) / 255.0
         output = forward(input)
         with torch.autocast(device.type, enabled=device.type == 'cuda'):
             focal_loss,tversky_loss,loss = criterion(output,target)
