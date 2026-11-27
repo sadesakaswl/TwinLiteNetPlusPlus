@@ -91,7 +91,7 @@ def train_net(args, hyp):
         eval_model = torch.nn.DataParallel(ema.ema) if use_ema else train_model
         print(f"Using {num_gpus} GPUs for training and validation")
 
-    forward = torch.compile(train_model) if use_compile else None
+    forward = torch.compile(train_model, mode='max-autotune') if use_compile else None
     scaler = torch.amp.GradScaler('cuda', enabled=cuda_available)
     
     for epoch in range(start_epoch, args.max_epochs):

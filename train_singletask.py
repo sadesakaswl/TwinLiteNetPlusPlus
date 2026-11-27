@@ -78,7 +78,7 @@ def train_net(args, hyp):
         load_optimizer_state(optimizers, checkpoint['optimizer'])
         print(f"=> Loaded checkpoint '{args.resume}' (epoch {start_epoch})")
     
-    forward = torch.compile(model) if getattr(args, 'compile', True) else None
+    forward = torch.compile(model, mode='max-autotune') if getattr(args, 'compile', True) else None
     scaler = torch.amp.GradScaler('cuda', enabled=cuda_available)
     
     for epoch in range(start_epoch, args.max_epochs):
