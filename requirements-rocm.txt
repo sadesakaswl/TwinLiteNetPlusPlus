@@ -1,14 +1,4 @@
---extra-index-url https://stable.repo.amd.com/rocm/whl-next/
-# The AMD index does not carry these two pinned versions.
---find-links https://pypi.org/simple/numpy/
---find-links https://pypi.org/simple/pillow/
+--index-url https://download.pytorch.org/whl/rocm10.0
 
-matplotlib==3.11.2
-numpy==2.5.5
-opencv-python==5.1.0.95
-pillow==13.0.0
-PyYAML==6.0.4
-scikit-image==0.26.0
-torch[device-all]==2.14.0+rocm10.1.0
-torchvision[device-all]==0.29.0a0+rocm10.1.0
-tqdm==4.70.1
+torch==2.15.0+rocm10.0
+torchvision==0.29.2+rocm10.0

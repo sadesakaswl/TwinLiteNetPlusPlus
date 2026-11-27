@@ -70,7 +70,7 @@ Semantic segmentation is crucial for autonomous driving, particularly for Drivab
 ## Installation
 
 Use [uv](https://docs.astral.sh/uv/) with your system Python (tested on Linux with Python 3.14).
-Run these commands from the repository root, substituting the requirements file for your hardware. This example uses CUDA:
+Run these commands from the repository root. This example uses CUDA:
 
 ```sh
 uv venv
@@ -85,8 +85,17 @@ Choose the requirements file that matches your hardware:
 | Backend | Requirements file |
 | --- | --- |
 | NVIDIA GPU with a CUDA 13.2-compatible driver | `requirements-cuda.txt` |
-| AMD GPU on Linux with ROCm 10.1 | `requirements-rocm.txt` |
+| AMD GPU on Linux with ROCm 10.0-compatible hardware and drivers | `requirements-rocm.txt` |
 | CPU only (Linux) | `requirements-cpu.txt` |
+
+For CPU or ROCm, replace the CUDA install command with the following two commands. Use `requirements-rocm.txt` instead of `requirements-cpu.txt` for AMD GPUs:
+
+```sh
+uv pip install -r requirements-cpu.txt
+uv pip install -r requirements-common.txt
+```
+
+The first command uses the official PyTorch index; the second installs the project's other dependencies from PyPI.
 
 ## Pre-trained Model
 The [original weights](https://drive.google.com/drive/folders/1EqBzUw0b17aEumZmWYrGZmbx_XJqU-vz?usp=sharing) and checkpoints are incompatible. Use weights or checkpoints from the SiLU architecture.
