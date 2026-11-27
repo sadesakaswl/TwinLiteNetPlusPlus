@@ -56,11 +56,13 @@ def train_net(args, hyp):
     
     trainLoader = torch.utils.data.DataLoader(
         BDD100K.Dataset(hyp, valid=False),
-        batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers, pin_memory=cuda_available)
+        batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers, pin_memory=cuda_available,
+        persistent_workers=args.num_workers > 0)
     
     valLoader = torch.utils.data.DataLoader(
         BDD100K.Dataset(hyp, valid=True),
-        batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers, pin_memory=cuda_available)
+        batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers, pin_memory=cuda_available,
+        persistent_workers=args.num_workers > 0)
     
     if cuda_available:
         model = model.cuda(0)
