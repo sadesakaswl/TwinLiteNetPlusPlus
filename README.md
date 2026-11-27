@@ -117,6 +117,8 @@ Update the your dataset path in the `./BDD100K.py`.
 
 Fresh runs use SiLU, scaled dot-product attention in CAAM, and standard convolution kernels in the decoder. The decoder uses bilinear feature upsampling and a pixel-shuffle output projection to produce raw segmentation logits. Muon updates convolution and linear weights; AdamW handles biases and other one-dimensional parameters.
 
+Pass `--compile` to either training script to use `torch.compile` during training. The first batch can take longer while PyTorch compiles the model. Multi-task training with `--compile` requires at most one visible GPU (e.g. `CUDA_VISIBLE_DEVICES=0`).
+
 ### Multi-task
 
 ```shell

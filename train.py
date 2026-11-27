@@ -39,6 +39,9 @@ def train_net(args, hyp):
     use_ema = args.ema
     cuda_available = torch.cuda.is_available()
     num_gpus = torch.cuda.device_count() if cuda_available else 0
+    use_compile = getattr(args, 'compile', False)
+    if use_compile and num_gpus > 1:
+        raise ValueError("--compile requires a single visible GPU; set CUDA_VISIBLE_DEVICES=0.")
     
     model = TwinLiteNetPlus(args)
     checkpoint = None
@@ -86,6 +89,7 @@ def train_net(args, hyp):
         eval_model = torch.nn.DataParallel(ema.ema) if use_ema else train_model
         print(f"Using {num_gpus} GPUs for training and validation")
 
+    forward = torch.compile(train_model) if use_compile else None
     scaler = torch.amp.GradScaler('cuda', enabled=cuda_available)
     
     for epoch in range(start_epoch, args.max_epochs):
@@ -93,7 +97,8 @@ def train_net(args, hyp):
         lr = poly_lr_scheduler(args, hyp, optimizers, epoch)
         print(f"Learning rate: {lr}")
         
-        ema = train(args, trainLoader, train_model, criteria, optimizers, conv_weights, epoch, scaler, args.verbose, ema)
+        ema = train(args, trainLoader, train_model, criteria, optimizers, conv_weights, epoch, scaler, args.verbose, ema,
+                    forward=forward)
         da_segment_results, ll_segment_results = val(valLoader, eval_model, args=args)
         
         print(f"Driving Area Segment: mIOU({da_segment_results[2]:.3f})")
@@ -121,6 +126,7 @@ if __name__ == '__main__':
     parser.add_argument('--config', default='nano', help='Model configuration')
     parser.add_argument('--verbose', action='store_true', help='Enable verbose logging')
     parser.add_argument('--ema', action='store_true', help='Use Exponential Moving Average (EMA)')
+    parser.add_argument('--compile', action='store_true', help='Use torch.compile for training on CPU or one visible GPU')
     args = parser.parse_args()
     
     with open(args.hyp, errors='ignore') as f:

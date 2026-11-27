@@ -95,8 +95,9 @@ def poly_lr_scheduler(args, hyp, optimizers, epoch, power=1.5):
     return lr
 
 
-def train(args, train_loader, model, criterion, optimizers, conv_weights, epoch, scaler, verbose=False, ema=None):
+def train(args, train_loader, model, criterion, optimizers, conv_weights, epoch, scaler, verbose=False, ema=None, forward=None):
     model.train()
+    forward = model if forward is None else forward
     device = next(model.parameters()).device
     print("epoch: ", epoch)
     total_batches = len(train_loader)
@@ -107,7 +108,7 @@ def train(args, train_loader, model, criterion, optimizers, conv_weights, epoch,
     for i, (_,input, target) in pbar:
         model.zero_grad(set_to_none=True)
         input = input.to(device, dtype=torch.float32) / 255.0
-        output = model(input)
+        output = forward(input)
         with torch.autocast(device.type, enabled=device.type == 'cuda'):
             focal_loss,tversky_loss,loss = criterion(output,target)
 
