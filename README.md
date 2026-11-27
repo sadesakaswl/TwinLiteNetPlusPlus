@@ -70,32 +70,23 @@ Semantic segmentation is crucial for autonomous driving, particularly for Drivab
 ## Installation
 
 Use [uv](https://docs.astral.sh/uv/) with your system Python (tested on Linux with Python 3.14).
-Run these commands from the repository root. This example uses CUDA:
+From the repository root, create and activate a virtual environment:
 
 ```sh
 uv venv
 source .venv/bin/activate
-uv pip install -r requirements-cuda.txt
-uv pip check
 ```
 
 If you already have a clean `.venv` using that interpreter, skip the `uv venv` step.
-Choose the requirements file that matches your hardware:
 
-| Backend | Requirements file |
-| --- | --- |
-| NVIDIA GPU with a CUDA 13.2-compatible driver | `requirements-cuda.txt` |
-| AMD GPU on Linux with ROCm 10.0-compatible hardware and drivers | `requirements-rocm.txt` |
-| CPU only (Linux) | `requirements-cpu.txt` |
+Use the [official PyTorch installer](https://pytorch.org/get-started/locally/) to select your OS, Pip, and compute platform (CUDA, ROCm, or CPU). Install `torch` and `torchvision` with the generated command, replacing `pip` or `pip3` with `uv pip` and keeping any `--index-url` it specifies. `torchaudio` is optional and isn't used by this project.
 
-For CPU or ROCm, replace the CUDA install command with the following two commands. Use `requirements-rocm.txt` instead of `requirements-cpu.txt` for AMD GPUs:
+Then install the remaining dependencies from PyPI:
 
 ```sh
-uv pip install -r requirements-cpu.txt
-uv pip install -r requirements-common.txt
+uv pip install -r requirements.txt
+uv pip check
 ```
-
-The first command uses the official PyTorch index; the second installs the project's other dependencies from PyPI.
 
 ## Pre-trained Model
 The [original weights](https://drive.google.com/drive/folders/1EqBzUw0b17aEumZmWYrGZmbx_XJqU-vz?usp=sharing) and checkpoints are incompatible. Use weights or checkpoints from the SiLU architecture.
