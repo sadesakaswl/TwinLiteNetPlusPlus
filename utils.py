@@ -1,3 +1,7 @@
+from collections import deque
+from concurrent.futures import ProcessPoolExecutor
+from contextlib import contextmanager
+from multiprocessing import get_context
 
 import torch
 import numpy as np
@@ -249,6 +253,54 @@ def val_one(val_loader = None, model = None, half = False, args=None):
 
 def save_checkpoint(state, filenameCheckpoint='checkpoint.pth.tar'):
     torch.save(state, filenameCheckpoint)
+
+def validation_loader(dataset, args, pin_memory):
+    return torch.utils.data.DataLoader(
+        dataset, batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers,
+        pin_memory=pin_memory, persistent_workers=args.num_workers > 0)
+
+
+_validation_context = None
+
+
+def _init_validation(args, hyp, model_type, dataset_type, report, device):
+    global _validation_context
+    model = model_type(args).to(device)
+    loader = validation_loader(dataset_type(hyp, valid=True), args, device.type == 'cuda')
+    _validation_context = model, loader, report, args
+
+
+def _validate_checkpoint(epoch, weights_path):
+    model, loader, report, args = _validation_context
+    model.load_state_dict(torch.load(weights_path, map_location='cpu', weights_only=True))
+    metrics = report(loader, model, args).replace('\n', '; ')
+    print(f"Validation epoch {epoch + 1}: {metrics}", flush=True)
+
+
+@contextmanager
+def parallel_validation(args, hyp, model_type, dataset_type, report, device):
+    if not getattr(args, 'parallel_val', True):
+        yield None
+        return
+
+    pending = deque()
+    with ProcessPoolExecutor(
+        max_workers=1, mp_context=get_context('spawn'), initializer=_init_validation,
+        initargs=(args, hyp, model_type, dataset_type, report, device),
+    ) as executor:
+        def submit(epoch, weights_path):
+            while pending and pending[0].done():
+                pending.popleft().result()
+            pending.append(executor.submit(_validate_checkpoint, epoch, weights_path))
+
+        try:
+            yield submit
+            while pending:
+                pending.popleft().result()
+        finally:
+            for future in pending:
+                future.cancel()
+
 
 def netParams(model):
     return np.sum([np.prod(parameter.size()) for parameter in model.parameters()])

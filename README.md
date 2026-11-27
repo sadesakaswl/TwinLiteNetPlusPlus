@@ -128,6 +128,8 @@ Fresh runs use SiLU, scaled dot-product attention in CAAM, and standard convolut
 
 Both training scripts enable `torch.compile(mode="max-autotune")` by default. The first batches can take longer while PyTorch compiles the model and benchmarks kernels; pass `--no-compile` to disable it. Multi-task training uses eager mode when multiple GPUs are visible. To compile that model, make only one GPU visible (e.g. `CUDA_VISIBLE_DEVICES=0`).
 
+Both training scripts validate each epoch's saved weights (EMA when enabled) in a separate process while the next epoch trains. Results include their epoch number, and the run waits for queued validation results before exiting. Validation shares the training CPU or primary GPU, so overlap might not reduce total runtime. Pass `--no-parallel-val` to run validation before starting the next epoch.
+
 ### Multi-task
 
 ```shell

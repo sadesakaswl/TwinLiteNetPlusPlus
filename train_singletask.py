@@ -1,4 +1,5 @@
 import os
+from functools import partial
 import torch
 import torch.optim.lr_scheduler
 import torch.backends.cudnn as cudnn
@@ -10,6 +11,7 @@ from argparse import ArgumentParser, BooleanOptionalAction
 from model.model import SingleLiteNetPlus
 from loss import SigleLoss
 from utils import build_optimizers, load_optimizer_state, train, val_one, netParams, save_checkpoint, poly_lr_scheduler
+from utils import parallel_validation, validation_loader
 import BDD100K
 
 class ModelEMA:
@@ -32,6 +34,13 @@ class ModelEMA:
                     v *= d
                     v += (1. - d) * msd[k].detach()
 
+def validation_report(loader, model, args):
+    results = val_one(loader, model, args=args)
+    if args.task == "DA":
+        return f"Driving Area Segment: mIOU({results[2]:.3f})"
+    return f"Lane Line Segment: Acc({results[0]:.3f}) IOU({results[1]:.3f})"
+
+
 def train_net(args, hyp):
     """Train the neural network model with given arguments and hyperparameters"""
     use_ema = args.ema
@@ -52,11 +61,6 @@ def train_net(args, hyp):
     trainLoader = torch.utils.data.DataLoader(
         BDD100K.DatasetOneTask(hyp, valid=False,task=args.task),
         batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers, pin_memory=cuda_available,
-        persistent_workers=args.num_workers > 0)
-    
-    valLoader = torch.utils.data.DataLoader(
-        BDD100K.DatasetOneTask(hyp, valid=True,task=args.task),
-        batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers, pin_memory=cuda_available,
         persistent_workers=args.num_workers > 0)
     
     if cuda_available:
@@ -83,31 +87,33 @@ def train_net(args, hyp):
     forward = torch.compile(model, mode='max-autotune') if getattr(args, 'compile', True) else None
     scaler = torch.amp.GradScaler('cuda', enabled=cuda_available)
     
-    for epoch in range(start_epoch, args.max_epochs):
-        model_file_name = os.path.join(args.savedir, f'model_{epoch}.pth')
-        lr = poly_lr_scheduler(args, hyp, optimizers, epoch)
-        print(f"Learning rate: {lr}")
-        
-        model.train()
-        ema = train(args, trainLoader, model, criteria, optimizers, conv_weights, epoch, scaler, args.verbose, ema,
-                    forward=forward)
-        
-        model.eval()
-        segment_results = val_one(valLoader, ema.ema if use_ema else model, args=args)
-        
-        print(f"Driving Area Segment: mIOU({segment_results[2]:.3f})") if args.task=="DA" else \
-            print(f"Lane Line Segment: Acc({segment_results[0]:.3f}) IOU({segment_results[1]:.3f})")
-        
-        torch.save(ema.ema.state_dict(), model_file_name) if use_ema else torch.save(model.state_dict(), model_file_name)
-        
-        save_checkpoint({
-            'epoch': epoch + 1,
-            'state_dict': model.state_dict(),
-            'ema_state_dict': ema.ema.state_dict() if use_ema else None,
-            'updates': ema.updates if use_ema else None,
-            'optimizer': {name: optimizer.state_dict() for name, optimizer in optimizers.items()},
-            'lr': lr
-        }, os.path.join(args.savedir, 'checkpoint.pth.tar'))
+    device = next(model.parameters()).device
+    dataset_type = partial(BDD100K.DatasetOneTask, task=args.task)
+    with parallel_validation(args, hyp, SingleLiteNetPlus, dataset_type, validation_report, device) as submit_validation:
+        if submit_validation is None:
+            valLoader = validation_loader(dataset_type(hyp, valid=True), args, cuda_available)
+
+        for epoch in range(start_epoch, args.max_epochs):
+            model_file_name = os.path.join(args.savedir, f'model_{epoch}.pth')
+            lr = poly_lr_scheduler(args, hyp, optimizers, epoch)
+            print(f"Learning rate: {lr}")
+
+            ema = train(args, trainLoader, model, criteria, optimizers, conv_weights, epoch, scaler, args.verbose, ema,
+                        forward=forward)
+            if submit_validation is None:
+                print(validation_report(valLoader, ema.ema if use_ema else model, args))
+
+            torch.save((ema.ema if use_ema else model).state_dict(), model_file_name)
+            save_checkpoint({
+                'epoch': epoch + 1,
+                'state_dict': model.state_dict(),
+                'ema_state_dict': ema.ema.state_dict() if use_ema else None,
+                'updates': ema.updates if use_ema else None,
+                'optimizer': {name: optimizer.state_dict() for name, optimizer in optimizers.items()},
+                'lr': lr
+            }, os.path.join(args.savedir, 'checkpoint.pth.tar'))
+            if submit_validation is not None:
+                submit_validation(epoch, model_file_name)
 
 if __name__ == '__main__':
     parser = ArgumentParser()
@@ -121,6 +127,8 @@ if __name__ == '__main__':
     parser.add_argument('--config', default='nano', help='Model configuration')
     parser.add_argument('--verbose', action='store_true', help='Enable verbose logging')
     parser.add_argument('--ema', action='store_true', help='Use Exponential Moving Average (EMA)')
+    parser.add_argument('--parallel-val', action=BooleanOptionalAction, default=True,
+                        help='Validate saved epoch weights in a background process (default: enabled)')
     parser.add_argument('--compile', action=BooleanOptionalAction, default=True,
                         help='Use torch.compile (default: enabled)')
     args = parser.parse_args()
