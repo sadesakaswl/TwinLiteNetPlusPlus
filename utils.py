@@ -120,9 +120,10 @@ def train(args, train_loader, model, criterion, optimizers, conv_weights, epoch,
         scaler.update()
         if ema is not None:
             ema.update(model)
-        if verbose:
+        if verbose and (i == 0 or (i + 1) % 10 == 0 or i + 1 == total_batches):
+            metrics = torch.stack((tversky_loss, focal_loss, loss.detach())).tolist()
             pbar.set_description(('%13s' * 1 + '%13.4g' * 3) %
-                                     (f'{epoch}/{300 - 1}', tversky_loss, focal_loss, loss.item()))
+                                     (f'{epoch}/{300 - 1}', *metrics))
     return ema if ema is not None else None
 
 
