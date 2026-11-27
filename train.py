@@ -5,7 +5,7 @@ import torch.backends.cudnn as cudnn
 import yaml
 import math
 from copy import deepcopy
-from argparse import ArgumentParser
+from argparse import ArgumentParser, BooleanOptionalAction
 
 from model.model import TwinLiteNetPlus
 from loss import TotalLoss
@@ -39,8 +39,10 @@ def train_net(args, hyp):
     use_ema = args.ema
     cuda_available = torch.cuda.is_available()
     num_gpus = torch.cuda.device_count() if cuda_available else 0
-    use_compile = getattr(args, 'compile', False)
-    if use_compile and num_gpus > 1:
+    use_compile = getattr(args, 'compile', None)
+    if use_compile is None:
+        use_compile = num_gpus <= 1
+    elif use_compile and num_gpus > 1:
         raise ValueError("--compile requires a single visible GPU; set CUDA_VISIBLE_DEVICES=0.")
     
     model = TwinLiteNetPlus(args)
@@ -126,7 +128,8 @@ if __name__ == '__main__':
     parser.add_argument('--config', default='nano', help='Model configuration')
     parser.add_argument('--verbose', action='store_true', help='Enable verbose logging')
     parser.add_argument('--ema', action='store_true', help='Use Exponential Moving Average (EMA)')
-    parser.add_argument('--compile', action='store_true', help='Use torch.compile for training on CPU or one visible GPU')
+    parser.add_argument('--compile', action=BooleanOptionalAction,
+                        help='Use torch.compile (default: enabled on CPU or one visible GPU)')
     args = parser.parse_args()
     
     with open(args.hyp, errors='ignore') as f:

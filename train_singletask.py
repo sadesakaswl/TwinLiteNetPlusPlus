@@ -5,7 +5,7 @@ import torch.backends.cudnn as cudnn
 import yaml
 import math
 from copy import deepcopy
-from argparse import ArgumentParser
+from argparse import ArgumentParser, BooleanOptionalAction
 
 from model.model import SingleLiteNetPlus
 from loss import SigleLoss
@@ -78,7 +78,7 @@ def train_net(args, hyp):
         load_optimizer_state(optimizers, checkpoint['optimizer'])
         print(f"=> Loaded checkpoint '{args.resume}' (epoch {start_epoch})")
     
-    forward = torch.compile(model) if getattr(args, 'compile', False) else None
+    forward = torch.compile(model) if getattr(args, 'compile', True) else None
     scaler = torch.amp.GradScaler('cuda', enabled=cuda_available)
     
     for epoch in range(start_epoch, args.max_epochs):
@@ -119,7 +119,8 @@ if __name__ == '__main__':
     parser.add_argument('--config', default='nano', help='Model configuration')
     parser.add_argument('--verbose', action='store_true', help='Enable verbose logging')
     parser.add_argument('--ema', action='store_true', help='Use Exponential Moving Average (EMA)')
-    parser.add_argument('--compile', action='store_true', help='Use torch.compile for training')
+    parser.add_argument('--compile', action=BooleanOptionalAction, default=True,
+                        help='Use torch.compile (default: enabled)')
     args = parser.parse_args()
     
     with open(args.hyp, errors='ignore') as f:
